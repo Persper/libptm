@@ -229,6 +229,11 @@ parse_default_method()
 
   while (isspace((unsigned char) *env))
     ++env;
+  if (strncmp(env, "footprint", 9) == 0)
+    {
+      disp = GTM::dispatch_footprint();
+      env += 9;
+    }
   if (strncmp(env, "serialirr_onwrite", 17) == 0)
     {
       disp = GTM::dispatch_serialirr_onwrite();
