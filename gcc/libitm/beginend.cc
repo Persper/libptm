@@ -310,9 +310,11 @@ GTM::gtm_thread::begin_transaction (uint32_t prop, const gtm_jmpbuf *jb)
 	  // We can use flat nesting, so elide this transaction.
 	  if (!(prop & pr_instrumentedCode))
 	    {
-	      if (!(tx->state & STATE_SERIAL) ||
-		  !(tx->state & STATE_IRREVOCABLE))
-		tx->serialirr_mode();
+              if (tx->state & STATE_RELAXED)
+                ; // Skip serial-irrevocable mode
+              else if (!(tx->state & STATE_SERIAL) ||
+                  !(tx->state & STATE_IRREVOCABLE))
+                tx->serialirr_mode();
 	    }
 	  // Increment nesting level after checking that we have a method that
 	  // allows us to continue.
@@ -529,10 +531,12 @@ _ITM_abortTransaction (_ITM_abortReason reason)
 
       // Aborting an outermost transaction finishes execution of the whole
       // transaction. Therefore, reset transaction state.
-      if (tx->state & gtm_thread::STATE_SERIAL)
-	gtm_thread::serial_lock.write_unlock ();
+      if (tx->state & gtm_thread::STATE_RELAXED)
+        ; // Skip any serial lock operation
+      else if (tx->state & gtm_thread::STATE_SERIAL)
+        gtm_thread::serial_lock.write_unlock ();
       else
-	gtm_thread::serial_lock.read_unlock (tx);
+        gtm_thread::serial_lock.read_unlock (tx);
       tx->state = 0;
 
       GTM_longjmp (a_abortTransaction | a_restoreLiveVariables,
@@ -566,7 +570,9 @@ GTM::gtm_thread::trycommit ()
     {
       // The transaction is now inactive. Everything that we still have to do
       // will not synchronize with other transactions anymore.
-      if (state & gtm_thread::STATE_SERIAL)
+      if (state & gtm_thread::STATE_RELAXED)
+        ; // Skip any serial lock operation
+      else if (state & gtm_thread::STATE_SERIAL)
         {
           gtm_thread::serial_lock.write_unlock ();
           // There are no other active transactions, so there's no need to

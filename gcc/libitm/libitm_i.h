@@ -1,5 +1,8 @@
 /* Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2016 Persper Inc.
+
    Contributed by Richard Henderson <rth@redhat.com>.
+   Contributed by Jinglei Ren <jinglei@persper.com>.
 
    This file is part of the GNU Transactional Memory Library (libitm).
 
@@ -216,6 +219,9 @@ struct gtm_thread
   // Implies that no logging is being done, and abort is not possible.
   // Can be reset only when restarting the outermost transaction.
   static const uint32_t STATE_IRREVOCABLE	= 0x0002;
+  // Set if the serial write lock is skipped.
+  // Assumes all transactions are revocable.
+  static const uint32_t STATE_RELAXED		= 0x0004;
 
   // A bitmask of the above.
   uint32_t state;
