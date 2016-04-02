@@ -63,7 +63,8 @@ GTM::gtm_thread::decide_retry_strategy (gtm_restart_reason r)
 	  // ??? Note that we can still re-initialize too often, but avoiding
 	  // that would increase code complexity, which seems unnecessary
 	  // given that re-inits should be very infrequent.
-	  serial_lock.read_unlock(this);
+          if (!(state & gtm_thread::STATE_RELAXED))
+	    serial_lock.read_unlock(this);
 	  serial_lock.write_lock();
 	  if (disp->get_method_group()
 	      == default_dispatch.load(memory_order_relaxed)
@@ -109,7 +110,8 @@ GTM::gtm_thread::decide_retry_strategy (gtm_restart_reason r)
       if ((this->state & STATE_SERIAL) == 0)
 	{
 	  this->state |= STATE_SERIAL;
-	  serial_lock.read_unlock (this);
+          if (!(state & gtm_thread::STATE_RELAXED))
+	    serial_lock.read_unlock (this);
 	  serial_lock.write_lock ();
 	}
 
@@ -179,20 +181,23 @@ GTM::gtm_thread::decide_begin_dispatch (uint32_t prop)
 	  // active transaction and verify this.  Relaxed memory order is fine
 	  // because the serial lock itself will have established
 	  // happens-before for any change to the selected dispatch.
-	  serial_lock.read_lock (this);
+          if (!(this->state & gtm_thread::STATE_RELAXED))
+            serial_lock.read_lock (this);
 	  if (default_dispatch.load(memory_order_relaxed) == dd_orig)
 	    return dd;
 
 	  // If we raced with a concurrent modification of default_dispatch,
 	  // just fall back to serialirr.  The dispatch choice might not be
 	  // up-to-date anymore, but this is harmless.
-	  serial_lock.read_unlock (this);
+          if (!(this->state & gtm_thread::STATE_RELAXED))
+            serial_lock.read_unlock (this);
 	  dd = dispatch_serialirr();
 	}
     }
 
   // We are some kind of serial transaction.
-  serial_lock.write_lock();
+  if (!(this->state & gtm_thread::STATE_RELAXED))
+    serial_lock.write_lock();
   state = dd->requires_serial();
   return dd;
 }
