@@ -45,7 +45,7 @@ static size_t written_bytes(0);
 class footprint_dispatch : public abi_dispatch
 {
  public:
-  footprint_dispatch() : abi_dispatch(false, true, true, false,
+  footprint_dispatch() : abi_dispatch(false, true, false, false,
       gtm_thread::STATE_SERIAL | gtm_thread::STATE_IRREVOCABLE, &o_serial_mg)
   { }
 

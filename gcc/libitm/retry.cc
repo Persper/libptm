@@ -239,7 +239,7 @@ parse_default_method()
       disp = GTM::dispatch_footprint();
       env += 9;
     }
-  if (strncmp(env, "serialirr_onwrite", 17) == 0)
+  else if (strncmp(env, "serialirr_onwrite", 17) == 0)
     {
       disp = GTM::dispatch_serialirr_onwrite();
       env += 17;
