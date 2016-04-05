@@ -37,6 +37,13 @@
     return load(ptr, abi_dispatch::LSMOD);                                  \
   }
 
+#define ITM_READ_M_D(T, LSMOD, M, M2)                                       \
+  M _ITM_TYPE_##T ITM_REGPARM ITM_##LSMOD##T##M2 (const _ITM_TYPE_##T *ptr) \
+  {                                                                         \
+    return *ptr;                                                            \
+  }
+
+
 #define ITM_READ_M_PV(T, LSMOD, M, M2)                                      \
   M _ITM_TYPE_##T ITM_REGPARM ITM_##LSMOD##T##M2 (const _ITM_TYPE_##T *ptr) \
   = 0;
@@ -64,10 +71,10 @@
   ITM_WRITE_M(T, WaR, M, M2)             \
   ITM_WRITE_M(T, WaW, M, M2)
 #define CREATE_DISPATCH_METHODS_T_PV(T, M, M2) \
-  ITM_READ_M_PV(T, R, M, M2)                \
-  ITM_READ_M_PV(T, RaR, M, M2)              \
-  ITM_READ_M_PV(T, RaW, M, M2)              \
-  ITM_READ_M_PV(T, RfW, M, M2)              \
+  ITM_READ_M_D(T, R, inline, M2)            \
+  ITM_READ_M_D(T, RaR, inline, M2)          \
+  ITM_READ_M_D(T, RaW, inline, M2)          \
+  ITM_READ_M_D(T, RfW, inline, M2)          \
   ITM_WRITE_M_PV(T, W, M, M2)               \
   ITM_WRITE_M_PV(T, WaR, M, M2)             \
   ITM_WRITE_M_PV(T, WaW, M, M2)
