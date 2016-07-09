@@ -7,27 +7,31 @@
 #ifndef PERSPER_LIBPM_NAMING_H_
 #define PERSPER_LIBPM_NAMING_H_
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @brief Opens the persistent memory region from a file that
- * stores memory data as it is while the program is offline.
+ * @brief Opens the persistent memory region from a backup file that
+ * stores memory data. The file exists while the program is closed.
  * If the specified file does not exist, a new file is created and
  * the persistent memory region is empty.
  *
  * @param file The path to the backup file.
+ * @param size The size of the persistent memory region. -1 lets it equal
+ * the size of the backup file.
  *
 */
-void pm_open(const char *file);
+void pm_open(const char *file, size_t size);
 
 /**
  * @brief Closes the persistent memory region and
  * saves data to the backup file.
  *
- * @return Zero on success. Otherwise, persistent memory data should
- * be dumped in another way for safety.
+ * @return Zero on success. Otherwise, the caller should dump
+ * persistent memory data in another way for safety.
 */
 int pm_close();
 
