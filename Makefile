@@ -1,5 +1,5 @@
-CC = clang
-CXX = clang++
+CC = gcc
+CXX = g++
 CXXFLAGS += -std=c++11
 
 OBJ = naming.o MurmurHash3.o
