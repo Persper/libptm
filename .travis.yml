@@ -1,8 +1,6 @@
 language: c
-compiler: clang
+compiler: gcc
 script:
- - sudo apt-get update -qq
- - sudo apt-get install -yqq libc++-dev
  - make
  - make test
 branches:
