@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.6.2)
+
+add_subdirectory(gtest)
+
+include_directories(gtest/include gtest)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-
-add_executable(cmain main.c)
-add_executable(ccmain main.cc)
-
-target_link_libraries(cmain pm)
-target_link_libraries(ccmain pm)
+cxx_executable(allocator_unittest . gtest_main)
+add_test(allocator_unittest allocator_unittest)
