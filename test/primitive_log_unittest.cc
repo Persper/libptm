@@ -48,21 +48,50 @@ TEST_F(PrimitiveLogTest, AppendTruncate) {
   ASSERT_EQ(log_->Truncate(), nullptr);
 }
 
+TEST_F(PrimitiveLogTest, ExtendRewind) {
+  ASSERT_EQ(log_->Init(size_), 0);
+  LogEntry *entry = log_->Append(100);
+  ASSERT_NE(entry, nullptr);
+  for (int i = 0; i < 8; ++i) {
+    ASSERT_EQ(log_->Extend(entry, 100), 0) << "i = " << i;
+  }
+  ASSERT_NE(log_->Extend(entry, 100), 0);
+  ASSERT_EQ(log_->Rewind(entry), nullptr);
+  ASSERT_NE(log_->Truncate(), nullptr);
+  ASSERT_NE(log_->Rewind(), nullptr);
+
+  ASSERT_NE(log_->Append(300), nullptr);
+  ASSERT_NE(log_->Append(300), nullptr);
+  entry = log_->Append(200);
+  ASSERT_NE(entry, nullptr);
+  ASSERT_EQ(log_->Extend(entry, 100), 0);
+  ASSERT_NE(log_->Extend(entry, 100), 0);
+  ASSERT_NE(log_->Truncate(), nullptr);
+  ASSERT_NE(log_->Truncate(), nullptr);
+  ASSERT_EQ(log_->Rewind(entry)->size, 300);
+}
+
 TEST_F(PrimitiveLogTest, Comprehensive) {
   ASSERT_EQ(log_->Init(size_), 0);
   std::queue<size_t> entries;
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 100000; ++i) {
+    if (i % 100 == 88) log_->Init(size_);
     size_t s = rand() % (size_ / 2);
     LogEntry *entry = log_->Append(s);
+    if (!s) {
+      ASSERT_EQ(entry, nullptr);
+      continue;
+    }
     if (!entry) {
       while (!entries.empty()) {
         ASSERT_EQ(log_->Head()->size, entries.front()) << "i = " << i;
         ASSERT_NE(log_->Truncate(), nullptr) << "i = " << i;
         entries.pop();
       }
-      log_->Rewind();
+      ASSERT_NE(log_->Rewind(), nullptr) << "i = " << i;
       ASSERT_NE(entry = log_->Append(s), nullptr) << "i = " << i;
-      ASSERT_EQ(log_->Extend(entry, 100), s += 100) << "i = " << i;
+      ASSERT_EQ(log_->Extend(entry, 100), 0) << "i = " << i;
+      s += 100;
     }
     entries.push(s);
   }
