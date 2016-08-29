@@ -32,31 +32,30 @@ struct LogEntry {
  * A primitive log that involves no memory allocation and enables support for
  * atomic persistence by its interface design.
  *
- * The log offers no public constructor. It should be put on a zeroed memory
- * area and starts with a Init() call. The log can locate in persistent memory,
- * as long as the user follows the atomic persistence rule: any returned log
- * entry (except for one returned from a const function) is made persistent in
- * addition to the payload, and call Init() to restore the log on recovery.
- * Particularly, the user needs to call pcommit() twice, one for data of the
- * new entry and its following end entry (in total, a length of size +
- * sizeof(LogEntry)), and the other for the previous entry to enable visibility
- * of the new entry (a length of another sizeof(LogEntry)).
+ * The log should be put on either a zeroed memory area for initialization or
+ * an existing log area for restoral. The log can locate in persistent memory,
+ * as long as the user follows the atomic persistence rule (APR): For any
+ * returned log entry (except for one returned from a const function), the user
+ * needs to call pcommit() twice -- one for data of the new entry and its
+ * following end entry (in total, a length of size + sizeof(LogEntry)), and the
+ * other for the new entry (a length of another sizeof(LogEntry)) to enable
+ * visibility of data. 
 */
 class PrimitiveLog {
  public:
   /**
-   * Initializes the log of a certain size from where the log is located.
+   * Initializes or restores the log from a memory region.
    *
    * @return Zero on success. Otherwise, inconsistency is encountered.
   */
-  int Init(size_t size);
+  int Init(void *data, size_t size);
 
   /**
    * Appends an amount of data to the end of the log.
    * This function only prepares the space for the append but does not actually
    * allocate or copy data. If the log is persistent, the caller has to persist
    * a length of (size + 2 * sizeof(LogEntry)) memory space starting from the
-   * returned address following the atomic persistence rule.
+   * returned address following the APR.
    *
    * @return The appended log entry, by which the size and address of the
    * payload can be retrieved. Null if the input is invalid or there is no
@@ -69,7 +68,7 @@ class PrimitiveLog {
    * Extends an existing entry at the end of the log.
    * If the log is persistent, the caller has to persist a length of (size + 2
    * * sizeof(LogEntry)) memory space starting from the input entry address
-   * following the atomic persistence rule.
+   * following the APR.
    *
    * @param last The last entry of the log.
    * @param addition The number of bytes added to the entry.
@@ -87,6 +86,11 @@ class PrimitiveLog {
    * @see LogEntry
   */
   LogEntry *Head() const { return head_entry_; }
+
+  /**
+   * Whether the log is empty.
+  */
+  bool Empty() const { return head_entry_ == end_entry_; }
 
   /**
    * Truncates the head entry of the log.
@@ -115,12 +119,12 @@ class PrimitiveLog {
   LogEntry *Rewind(LogEntry *last = nullptr);
 
  private:
-  PrimitiveLog();
   LogEntry *NextEntry(LogEntry *cur, size_t size);
 
-  size_t size_;
-  LogEntry *head_entry_;
-  LogEntry *end_entry_;
+  void *data_ = nullptr;
+  size_t size_ = 0;
+  LogEntry *head_entry_ = nullptr;
+  LogEntry *end_entry_ = nullptr;
 };
 
 // Implementation of PrimitiveLog
@@ -129,19 +133,22 @@ LogEntry *PrimitiveLog::NextEntry(LogEntry *cur, size_t size) {
   return (LogEntry *)((char *)cur->data() + size);
 }
 
-int PrimitiveLog::Init(size_t size) {
+int PrimitiveLog::Init(void *data, size_t size) {
+  data_ = data;
   size_ = size;
-  head_entry_ = (LogEntry *)((char *)this + sizeof(PrimitiveLog));
+  if (!data_ || size_ < sizeof(LogEntry)) return EFAULT;
+
+  head_entry_ = (LogEntry *)data_;
   while (head_entry_->size < 0) {
     head_entry_ = NextEntry(head_entry_, - head_entry_->size);
-    if ((char *)head_entry_ - (char *)this >= size_) {
+    if ((char *)head_entry_ - (char *)data_ >= size_) {
       return EFAULT;
     }
   }
   end_entry_ = head_entry_;
   while (end_entry_->size) {
     end_entry_ = NextEntry(end_entry_, end_entry_->size);
-    if ((char *)end_entry_ - (char *)this >= size_) {
+    if ((char *)end_entry_ - (char *)data_ >= size_) {
       return EFAULT;
     }
   }
@@ -152,7 +159,7 @@ LogEntry *PrimitiveLog::Append(int size) {
   if (size <= 0) return nullptr;
   LogEntry *entry = end_entry_;
   end_entry_ = NextEntry(end_entry_, size);
-  if ((char *)end_entry_ - (char *)this > size_ - sizeof(LogEntry)) {
+  if ((char *)end_entry_ - (char *)data_ > size_ - sizeof(LogEntry)) {
     end_entry_ = entry;
     return nullptr;
   } else {
@@ -168,7 +175,7 @@ int PrimitiveLog::Extend(LogEntry *last, int addition) {
   }
   LogEntry *entry = end_entry_;
   end_entry_ = (LogEntry *)((char *)end_entry_ + addition);
-  if ((char *)end_entry_ - (char *)this > size_ - sizeof(LogEntry)) {
+  if ((char *)end_entry_ - (char *)data_ > size_ - sizeof(LogEntry)) {
     end_entry_ = entry;
     return ENOSPC;
   } else {
@@ -179,7 +186,7 @@ int PrimitiveLog::Extend(LogEntry *last, int addition) {
 }
 
 LogEntry *PrimitiveLog::Truncate() {
-  if (head_entry_ == end_entry_) return nullptr;
+  if (Empty()) return nullptr;
   LogEntry *entry = head_entry_;
   head_entry_ = NextEntry(head_entry_, head_entry_->size);
   entry->size = - entry->size;
@@ -189,7 +196,7 @@ LogEntry *PrimitiveLog::Truncate() {
 LogEntry *PrimitiveLog::Rewind(LogEntry *last) {
   if (!last) {
     if (head_entry_ != end_entry_) return nullptr;
-    head_entry_ = (LogEntry *)((char *)this + sizeof(PrimitiveLog));
+    head_entry_ = (LogEntry *)data_;
     end_entry_ = head_entry_;
     end_entry_->size = 0;
     return end_entry_;
@@ -197,7 +204,7 @@ LogEntry *PrimitiveLog::Rewind(LogEntry *last) {
     if (last != head_entry_ || NextEntry(last, last->size) != end_entry_) {
       return nullptr;
     }
-    head_entry_ = (LogEntry *)((char *)this + sizeof(PrimitiveLog));
+    head_entry_ = (LogEntry *)data_;
     if ((char *)head_entry_ + last->size + sizeof(LogEntry) > (char *)last) {
       head_entry_ = last;
       return nullptr;
