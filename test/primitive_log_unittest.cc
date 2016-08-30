@@ -8,8 +8,8 @@
 
 #include "log/primitive_log.h"
 
-#include <stdlib.h>
-#include <string.h>
+#include <cstdlib>
+#include <cstring>
 #include <queue>
 
 namespace persper {
@@ -30,7 +30,7 @@ class PrimitiveLogTest : public ::testing::Test {
 
 TEST_F(PrimitiveLogTest, Init) {
   ASSERT_EQ(log_.Init(data_, size_), 0);
-  ASSERT_EQ((void *)log_.Head(), data_);
+  ASSERT_EQ((void *)log_.head(), data_);
   memset(data_, 1, size_);
   ASSERT_NE(log_.Init(data_, size_), 0);
 }
@@ -42,10 +42,10 @@ TEST_F(PrimitiveLogTest, AppendTruncate) {
   }
   ASSERT_EQ(log_.Append(100), nullptr);
   for (int i = 0; i < 9; ++i) {
-    ASSERT_NE(log_.Head()->size, 0) << "i = " << i;
+    ASSERT_NE(log_.head()->size, 0) << "i = " << i;
     ASSERT_NE(log_.Truncate(), nullptr) << "i = " << i;
   }
-  ASSERT_EQ(log_.Head()->size, 0);
+  ASSERT_EQ(log_.head()->size, 0);
   ASSERT_EQ(log_.Truncate(), nullptr);
 }
 
@@ -85,7 +85,7 @@ TEST_F(PrimitiveLogTest, Comprehensive) {
     }
     if (!entry) {
       while (!entries.empty()) {
-        ASSERT_EQ(log_.Head()->size, entries.front()) << "i = " << i;
+        ASSERT_EQ(log_.head()->size, entries.front()) << "i = " << i;
         ASSERT_NE(log_.Truncate(), nullptr) << "i = " << i;
         entries.pop();
       }

@@ -7,6 +7,8 @@
 #ifndef PERSPER_LIBPM_PRIMITIVE_LOG_H_
 #define PERSPER_LIBPM_PRIMITIVE_LOG_H_
 
+#include <cstdlib>
+
 namespace persper {
 
 /**
@@ -22,9 +24,19 @@ struct LogEntry {
   int size;
 
   /**
-   * Get the address of the payload in the log.
+   * Gets the address of the payload in the log.
   */
   void *data() const { return (void *)((char *)this + sizeof(size)); }
+
+  /**
+   * Gets the next entry if it exists.
+   *
+   * @param skip Length to skip to locate the next entry. If not specified, it
+   * is the size of this entry.
+   */
+  LogEntry *next(size_t skip = 0) const {
+    return (LogEntry *)((char *)data() + (skip ? skip : labs(size)));
+  }
 };
 
 
@@ -39,7 +51,7 @@ struct LogEntry {
  * needs to call pcommit() twice -- one for data of the new entry and its
  * following end entry (in total, a length of size + sizeof(LogEntry)), and the
  * other for the new entry (a length of another sizeof(LogEntry)) to enable
- * visibility of data. 
+ * visibility of data.
 */
 class PrimitiveLog {
  public:
@@ -80,17 +92,20 @@ class PrimitiveLog {
 
   /**
    * Gets the head entry of the log.
-   *
-   * @return A log entry header, by which the size and address of the payload
-   * can be retrieved.
    * @see LogEntry
   */
-  LogEntry *Head() const { return head_entry_; }
+  LogEntry *head() const { return head_entry_; }
+
+  /**
+   * Gets the end entry of the log. This entry is invaid.
+   * @see LogEntry
+   */
+  LogEntry *end() const { return end_entry_; }
 
   /**
    * Whether the log is empty.
   */
-  bool Empty() const { return head_entry_ == end_entry_; }
+  bool empty() const { return head_entry_ == end_entry_; }
 
   /**
    * Truncates the head entry of the log.
@@ -118,9 +133,9 @@ class PrimitiveLog {
   */
   LogEntry *Rewind(LogEntry *last = nullptr);
 
- private:
-  LogEntry *NextEntry(LogEntry *cur, size_t size);
+  void *data() const { return data_; }
 
+ private:
   void *data_ = nullptr;
   size_t size_ = 0;
   LogEntry *head_entry_ = nullptr;
@@ -129,10 +144,6 @@ class PrimitiveLog {
 
 // Implementation of PrimitiveLog
 
-LogEntry *PrimitiveLog::NextEntry(LogEntry *cur, size_t size) {
-  return (LogEntry *)((char *)cur->data() + size);
-}
-
 int PrimitiveLog::Init(void *data, size_t size) {
   data_ = data;
   size_ = size;
@@ -140,14 +151,14 @@ int PrimitiveLog::Init(void *data, size_t size) {
 
   head_entry_ = (LogEntry *)data_;
   while (head_entry_->size < 0) {
-    head_entry_ = NextEntry(head_entry_, - head_entry_->size);
+    head_entry_ = head_entry_->next();
     if ((char *)head_entry_ - (char *)data_ >= size_) {
       return EFAULT;
     }
   }
   end_entry_ = head_entry_;
   while (end_entry_->size) {
-    end_entry_ = NextEntry(end_entry_, end_entry_->size);
+    end_entry_ = end_entry_->next();
     if ((char *)end_entry_ - (char *)data_ >= size_) {
       return EFAULT;
     }
@@ -158,7 +169,7 @@ int PrimitiveLog::Init(void *data, size_t size) {
 LogEntry *PrimitiveLog::Append(int size) {
   if (size <= 0) return nullptr;
   LogEntry *entry = end_entry_;
-  end_entry_ = NextEntry(end_entry_, size);
+  end_entry_ = end_entry_->next(size);
   if ((char *)end_entry_ - (char *)data_ > size_ - sizeof(LogEntry)) {
     end_entry_ = entry;
     return nullptr;
@@ -170,7 +181,7 @@ LogEntry *PrimitiveLog::Append(int size) {
 }
 
 int PrimitiveLog::Extend(LogEntry *last, int addition) {
-  if (NextEntry(last, last->size) != end_entry_) {
+  if (last->next() != end_entry_) {
     return EINVAL;
   }
   LogEntry *entry = end_entry_;
@@ -186,9 +197,9 @@ int PrimitiveLog::Extend(LogEntry *last, int addition) {
 }
 
 LogEntry *PrimitiveLog::Truncate() {
-  if (Empty()) return nullptr;
+  if (empty()) return nullptr;
   LogEntry *entry = head_entry_;
-  head_entry_ = NextEntry(head_entry_, head_entry_->size);
+  head_entry_ = head_entry_->next();
   entry->size = - entry->size;
   return entry;
 }
@@ -201,7 +212,7 @@ LogEntry *PrimitiveLog::Rewind(LogEntry *last) {
     end_entry_->size = 0;
     return end_entry_;
   } else {
-    if (last != head_entry_ || NextEntry(last, last->size) != end_entry_) {
+    if (last != head_entry_ || last->next() != end_entry_) {
       return nullptr;
     }
     head_entry_ = (LogEntry *)data_;
