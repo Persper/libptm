@@ -44,19 +44,19 @@ struct LogEntry {
  * A primitive log that involves no memory allocation and enables support for
  * atomic persistence by its interface design.
  *
- * The log should be put on either a zeroed memory area for initialization or
- * an existing log area for restoral. The log can locate in persistent memory,
- * as long as the user follows the atomic persistence rule (APR): For any
- * returned log entry (except for one returned from a const function), the user
- * needs to call pcommit() twice -- one for data of the new entry and its
- * following end entry (in total, a length of size + sizeof(LogEntry)), and the
- * other for the new entry (a length of another sizeof(LogEntry)) to enable
- * visibility of data.
+ * The log can locate in persistent memory, as long as the user follows the
+ * atomic persistence rule (APR): For any returned log entry (except for one
+ * returned from a const function), the user needs to call pcommit() twice --
+ * one for data of the new entry and its following end entry (in total, a
+ * length of size + sizeof(LogEntry)), and the other for the new entry (a
+ * length of another sizeof(LogEntry)) to enable visibility of data.
 */
 class PrimitiveLog {
  public:
   /**
-   * Initializes or restores the log from a memory region.
+   * Initializes or restores the log from a memory area. The input should be
+   * either a zeroed area for initialization or an existing log area for
+   * restoration.
    *
    * @return Zero on success. Otherwise, inconsistency is encountered.
   */
@@ -118,18 +118,17 @@ class PrimitiveLog {
 
   /**
    * Empties and resets the log.
-   * Note that this operation preserves the last entry if it is not truncated.
-   * However, this operation is only viable if the log is empty or has one last
+   * This operation is only allowed if the log is empty or has one last
    * entry (in case the last entry needs more space to extend).
    *
    * @param last The last entry of the log if it exists and should be
-   * preserved.  @return The new head entry of the log. It has to be persisted
-   * if the log is in persistent memory. Particularly, if the last entry is
-   * preserved, the caller should copy data of the last entry to the new entry
-   * and persist a length of (size + 2 * sizeof(LogEntry)) data following the
-   * atomic persitence rule. Finally, a null is returned if more entries than
-   * the last one is valid, or by all means there is no enough space for the
-   * last entry so that the caller has to split the oversized log operation.
+   * preserved.
+   * @return The new head entry of the log. It has to be persisted if the log
+   * is in persistent memory. Particularly, if the last entry is preserved, the
+   * caller should copy data of the last entry to the new entry and persist a
+   * length of (size + 2 * sizeof(LogEntry)) data following the APR. Finally, a
+   * null is returned if the log has more entries than the last one, or by all
+   * means there is no enough space for the last entry.
   */
   LogEntry *Rewind(LogEntry *last = nullptr);
 
@@ -205,23 +204,27 @@ LogEntry *PrimitiveLog::Truncate() {
 }
 
 LogEntry *PrimitiveLog::Rewind(LogEntry *last) {
-  if (!last) {
-    if (head_entry_ != end_entry_) return nullptr;
+  if (!last) { // No need to perserve the last entry.
+    // But in this case, the log must be empty.
+    if (!empty()) return nullptr;
     head_entry_ = (LogEntry *)data_;
     end_entry_ = head_entry_;
     end_entry_->size = 0;
     return end_entry_;
-  } else {
+  } else { // Has to reserve enough space for the preserved last entry.
     if (last != head_entry_ || last->next() != end_entry_) {
+      // The log is not allowed to have any other entry than the last one.
       return nullptr;
     }
     head_entry_ = (LogEntry *)data_;
-    if ((char *)head_entry_ + last->size + sizeof(LogEntry) > (char *)last) {
+    if (head_entry_->next(last->size) + 1 > last) {
+      // If the rewound entry would overlap with the original last entry,
+      // we regard the log space not enough. 
       head_entry_ = last;
       return nullptr;
     }
     end_entry_ = head_entry_;
-    return Append(last->size);
+    return Append(last->size); // Allocates space for the original last entry.
   }
 }
 
