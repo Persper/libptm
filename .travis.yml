@@ -13,3 +13,29 @@ script:
  - cmake ../
  - make
  - make test
+
+## For GCC
+# language: cpp
+# compiler: gcc
+# os: linux
+# addons:
+#   apt:
+#     sources:
+#      - ubuntu-toolchain-r-test
+#     packages:
+#      - gcc-5
+#      - g++-5
+# before_install:
+#  - sudo apt-get update -q
+#  - sudo apt-get install -yq gcc-5 g++-5
+#  - sudo apt-get install -yq libgmp-dev libmpfr-dev libmpc-dev flex
+# before_script:
+#  - export CC=gcc-5
+#  - export CXX=g++-5
+#  - cd gcc
+# script:
+#  - ./configure --enable-languages=c,c++ --disable-multilib --enable-silent-rules --silent
+#  - make V=0 -j2 --no-print-directory
+# branches:
+#   only:
+#    - master
